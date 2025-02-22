@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from windows_software_analyzer.vulnerabilities_analyzer import Vulnerability
+from windows_software_analyzer.vulnerability_analyzer import Vulnerability
 
 @dataclass
 class SoftwareInfo:

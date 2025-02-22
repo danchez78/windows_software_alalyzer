@@ -17,7 +17,7 @@ if __name__ == "__main__":
             up_count += 1
 
     print(f"""
-    The number of applications that were analyzed: {soft_count}\n
-    The number of Vulnerable ones: {vuln_count}\n
-    The number of improved ones: {up_count}\n
+    Analyzed programs: {soft_count}\n
+    Vulnerable programs: {vuln_count}\n
+    Programs to update: {up_count}\n
     """)
