@@ -1,9 +1,9 @@
 import requests
 
-from .. import Software, Vulnerability
+from .. import SoftwareForAnalyze, Vulnerability
 
 
-def check_osv_vulnerabilities(software: Software) -> [Vulnerability]:
+def check_osv_vulnerabilities(software: SoftwareForAnalyze) -> [Vulnerability]:
     URL = "https://api.osv.dev/v1/query"
     PAYLOAD = {
         "package": {

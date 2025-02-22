@@ -1,5 +1,5 @@
-from dataclasses import dataclass
-
+from dataclasses import dataclass, field
+from windows_software_analyzer.vulnerabilities_analyzer import Vulnerability
 
 @dataclass
 class SoftwareInfo:
@@ -9,6 +9,7 @@ class SoftwareInfo:
     available_version: str
     install_location: str
     install_date: str
+    vulnerabilities: list[Vulnerability] = field(default_factory=list)
 
     def __eq__(self, value: "SoftwareInfo") -> bool:
         return self.name == value.name
@@ -21,4 +22,5 @@ class SoftwareInfo:
         available version - {self.available_version}
         install location - {self.install_location}
         install date - {self.install_date}
+        vulnerabilities - {self.vulnerabilities}
     """
