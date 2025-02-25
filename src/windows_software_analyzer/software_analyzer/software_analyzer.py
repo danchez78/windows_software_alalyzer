@@ -5,19 +5,22 @@ import re
 from . import structures as struct
 
 class SoftwareAnalyzer:
-    __REGISTRY_PATHS = [
+    __REGISTRY_USER_DATA_PATH= r"SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData"
+    __REGISTRY_UNINSTALL_PATHS = [
         r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
         r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
     ]
+
 
     def get_installed_software(self) -> list[struct.SoftwareInfo]:
         installed_software: list[struct.SoftwareInfo] = self._get_list_of_programs()
 
         software_info: list[struct.SoftwareInfo] = []
-        for path in self.__REGISTRY_PATHS:
+        for path in self.__REGISTRY_UNINSTALL_PATHS:
             software_info.extend(self._get_software_by_key_and_path(winreg.HKEY_LOCAL_MACHINE, path))
         for path in self._get_hkey_users_paths():
             software_info.extend(self._get_software_by_key_and_path(winreg.HKEY_USERS, path))
+        software_info.extend(self._get_software_from_user_data())
         for software in software_info:
             if software not in installed_software:
                 installed_software.append(software)
@@ -44,6 +47,27 @@ class SoftwareAnalyzer:
             except WindowsError:
                 continue
         return software_list
+
+    def _get_software_from_user_data(self) -> list[struct.SoftwareInfo]:
+        software_info: list[struct.SoftwareInfo] = []
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, self.__REGISTRY_USER_DATA_PATH) as key1:
+            for i in range(winreg.QueryInfoKey(key1)[0]):
+                sid = winreg.EnumKey(key1, i)
+                products_path = f"{self.__REGISTRY_USER_DATA_PATH}\{sid}\Products"
+                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, products_path) as key2:
+                    for j in range(winreg.QueryInfoKey(key2)[0]):
+                        product_id = winreg.EnumKey(key2, j)
+                        product_path = f"{products_path}\{product_id}\InstallProperties"
+                        try:
+                            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, product_path) as product_subkey:
+                                software = self._get_software_from_subkey(product_subkey)
+                                if software not in software_info:
+                                    software_info.append(software)
+                                else:
+                                    self._update_software_info(software_info, software)
+                        except EnvironmentError:
+                            continue
+        return software_info
 
     def _get_software_from_subkey(self, subkey: winreg.HKEYType) -> struct.SoftwareInfo:
         keys = ["DisplayName", "DisplayVersion", "InstallLocation", "InstallDate", "Publisher"]
@@ -98,6 +122,17 @@ class SoftwareAnalyzer:
             ))
 
         return software_info
+
+    def _get_hkey_users_paths(self) -> list[str]:
+        paths: list[str] = []
+        with winreg.OpenKey(winreg.HKEY_USERS, "") as key:
+            for i in range(winreg.QueryInfoKey(key)[0]):
+                sid = winreg.EnumKey(key, i)
+                for path in self.__REGISTRY_UNINSTALL_PATHS:
+                    hkey_path = sid + "\\" + path
+                    paths.append(hkey_path)
+
+        return paths
     
     @staticmethod
     def _update_software_info(software_info: list[struct.SoftwareInfo], software: struct.SoftwareInfo) -> list[struct.SoftwareInfo]:
@@ -109,14 +144,3 @@ class SoftwareAnalyzer:
                 updated_software.install_location = software.install_location
             if not updated_software.install_date: 
                 updated_software.install_date = software.install_date
-
-    def _get_hkey_users_paths(self) -> list[str]:
-        paths: list[str] = []
-        with winreg.OpenKey(winreg.HKEY_USERS, "") as key:
-            for i in range(winreg.QueryInfoKey(key)[0]):
-                sid = winreg.EnumKey(key, i)
-                for path in self.__REGISTRY_PATHS:
-                    hkey_path = sid + "\\" + path
-                    paths.append(hkey_path)
-
-        return paths
