@@ -15,6 +15,7 @@ class SoftwareInfo:
         return self.name == value.name
     
     def __str__(self) -> str:
+        vulnerabilities = "\n".join([str(v) for v in self.vulnerabilities]) if len(self.vulnerabilities) else "-"
         return f"""
     {self.name}:
         vendor - {self.vendor}
@@ -22,5 +23,6 @@ class SoftwareInfo:
         available version - {self.available_version}
         install location - {self.install_location}
         install date - {self.install_date}
-        vulnerabilities - {self.vulnerabilities}
+        vulnerabilities:
+        {vulnerabilities}
     """

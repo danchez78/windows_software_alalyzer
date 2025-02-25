@@ -12,41 +12,57 @@ class SoftwareAnalyzer:
 
     def get_installed_software(self) -> list[struct.SoftwareInfo]:
         installed_software: list[struct.SoftwareInfo] = self._get_list_of_programs()
-        for path in self.__REGISTRY_PATHS:
-            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, path)
-            for i in range(0, winreg.QueryInfoKey(key)[0]):
-                try:
-                    subkey_name = winreg.EnumKey(key, i)
-                    with winreg.OpenKey(key, subkey_name) as subkey:
-                        software = self._get_software_from_subkey(subkey)
-                        if software not in installed_software:
-                            installed_software.append(software)
-                        else:
-                            self._update_software_info(installed_software, software)
-                except EnvironmentError:
-                    continue
-                except WindowsError:
-                    continue
 
+        software_info: list[struct.SoftwareInfo] = []
+        for path in self.__REGISTRY_PATHS:
+            software_info.extend(self._get_software_by_key_and_path(winreg.HKEY_LOCAL_MACHINE, path))
+        for path in self._get_hkey_users_paths():
+            software_info.extend(self._get_software_by_key_and_path(winreg.HKEY_USERS, path))
+        for software in software_info:
+            if software not in installed_software:
+                installed_software.append(software)
+            else:
+                self._update_software_info(installed_software, software)
         return installed_software
     
-    def _get_software_from_subkey(self, subkey: winreg.HKEYType) -> struct.SoftwareInfo:
-        display_name = winreg.QueryValueEx(subkey, "DisplayName")[0]
-        display_version = winreg.QueryValueEx(subkey, "DisplayVersion")[0]
-        install_location = winreg.QueryValueEx(subkey, "InstallLocation")[0]
-        install_date = winreg.QueryValueEx(subkey, "InstallDate")[0]
-        publisher = winreg.QueryValueEx(subkey, "Publisher")[0]
+    def _get_software_by_key_and_path(self, key_type, path) -> list[struct.SoftwareInfo]:
+        software_list = []
+        try:
+            key = winreg.OpenKey(key_type, path)
+        except EnvironmentError:
+            return software_list
 
-        if not install_location:
-            install_location = winreg.QueryValueEx(subkey, "InstallSource")[0]
+        for i in range(0, winreg.QueryInfoKey(key)[0]):
+            try:
+                subkey_name = winreg.EnumKey(key, i)
+                with winreg.OpenKey(key, subkey_name) as subkey:
+                   software = self._get_software_from_subkey(subkey)
+                   if software.name:
+                    software_list.append(software)
+            except EnvironmentError:
+                continue
+            except WindowsError:
+                continue
+        return software_list
+
+    def _get_software_from_subkey(self, subkey: winreg.HKEYType) -> struct.SoftwareInfo:
+        keys = ["DisplayName", "DisplayVersion", "InstallLocation", "InstallDate", "Publisher"]
+        
+        results = {}
+        for key in keys:
+            try:
+                res = winreg.QueryValueEx(subkey, key)[0]
+                results[key] = res
+            except EnvironmentError:
+                results[key] = ""
 
         return struct.SoftwareInfo(
-            name=display_name, 
-            vendor=publisher,
-            version=display_version,
+            name=results["DisplayName"], 
+            vendor=results["Publisher"],
+            version=results["DisplayVersion"],
             available_version="",
-            install_location=install_location,
-            install_date=install_date,
+            install_location=results["InstallLocation"],
+            install_date=results["InstallDate"],
         )
 
     @staticmethod
@@ -57,20 +73,29 @@ class SoftwareAnalyzer:
         if not result.stdout:
             return ""
         
+        pattern = r"(.+?)\s{2,}([\w\.-]+)\s{2,}([\d\.]+)(?:\s{2,}([\d\.]+))?\s+(winget)$"
+        
         software_info: list[struct.SoftwareInfo] = []
         for line in result.stdout.strip().split("\n"):
-        # Парсим строки вида: "Google Chrome  Google.Chrome  121.0.6167.184  122.0.6228.0"
-            match = re.match(r"(.+?)\s+([\w\.-]+)\s+([\d\.]+)\s+([\d\.]+)?", line)
+            match = re.match(pattern, line)
             if match:
-                name, _, installed_version, available_version = match.groups()
-                software_info.append(struct.SoftwareInfo(
-                    name=name.strip(),
-                    vendor="",
-                    version=installed_version.strip(),
-                    available_version=available_version.strip() if available_version else "",
-                    install_location="",
-                    install_date="",
-                ))
+                name = match.group(1).strip()
+                version_current = match.group(3).strip()
+                version_latest = match.group(4).strip() if match.group(4) else "N/A"
+            else:
+                continue
+
+            if "ARP\\" in name:
+                name = " ".join(name.split(" ")[:-1]).strip()
+
+            software_info.append(struct.SoftwareInfo(
+                name=name,
+                vendor="",
+                version=version_current.strip(),
+                available_version=version_latest,
+                install_location="",
+                install_date="",
+            ))
 
         return software_info
     
@@ -78,6 +103,20 @@ class SoftwareAnalyzer:
     def _update_software_info(software_info: list[struct.SoftwareInfo], software: struct.SoftwareInfo) -> list[struct.SoftwareInfo]:
         updated_software = next((s for s in software_info if s.name == software.name), None)
         if updated_software:
-            updated_software.vendor = software.vendor
-            updated_software.install_location = software.install_location
-            updated_software.install_date = software.install_date
+            if not updated_software.vendor:
+                updated_software.vendor = software.vendor
+            if not updated_software.install_location: 
+                updated_software.install_location = software.install_location
+            if not updated_software.install_date: 
+                updated_software.install_date = software.install_date
+
+    def _get_hkey_users_paths(self) -> list[str]:
+        paths: list[str] = []
+        with winreg.OpenKey(winreg.HKEY_USERS, "") as key:
+            for i in range(winreg.QueryInfoKey(key)[0]):
+                sid = winreg.EnumKey(key, i)
+                for path in self.__REGISTRY_PATHS:
+                    hkey_path = sid + "\\" + path
+                    paths.append(hkey_path)
+
+        return paths

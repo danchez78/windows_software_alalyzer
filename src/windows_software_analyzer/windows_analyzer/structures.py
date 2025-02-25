@@ -21,7 +21,7 @@ Windows info:
         {pending_updates}
             """.format(
                 version=self.version,
-                release=self.version,
+                release=self.release,
                 installed_updates=installed_updates,
                 pending_updates=pending_updates,
             )
